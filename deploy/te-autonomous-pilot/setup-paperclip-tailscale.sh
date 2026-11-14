@@ -29,8 +29,8 @@ systemctl enable --now tailscaled
 /usr/bin/tailscale version | head -n 2
 
 install -d -m 0700 /var/lib/te-cos-tailnet
-install -m 0600 /dev/null /var/lib/te-cos-tailnet/login.log
-install -m 0600 /dev/null /var/lib/te-cos-tailnet/serve-attempt.log
+touch /var/lib/te-cos-tailnet/login.log /var/lib/te-cos-tailnet/serve-attempt.log
+chmod 0600 /var/lib/te-cos-tailnet/login.log /var/lib/te-cos-tailnet/serve-attempt.log
 
 echo "=== INSTALL AUTOMATIC HTTPS FINALIZER ==="
 cat >/usr/local/sbin/te-cos-tailnet-finalize.sh <<'FINISH'
