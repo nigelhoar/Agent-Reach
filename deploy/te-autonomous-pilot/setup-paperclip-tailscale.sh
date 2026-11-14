@@ -175,6 +175,24 @@ fi
 echo "=== CURRENT ACCESS STATE ==="
 /usr/local/sbin/te-cos-tailnet-finalize.sh || true
 cat /var/lib/te-cos-tailnet/status.txt 2>/dev/null || true
+echo "=== PAPERCLIP ADMIN INVITATION (SENSITIVE — KEEP PRIVATE) ==="
+# Store nothing in a repository. The one-time invite is output only to this
+# authenticated Azure Cloud Shell session. Replace localhost with the final
+# Tailscale HTTPS hostname, retaining the /invite/ path and token.
+(
+  cd /home/tepilot
+  runuser -u tepilot -- env \
+    -u OPENAI_API_KEY -u CODEX_API_KEY \
+    HOME=/home/tepilot \
+    PAPERCLIP_HOME=/home/tepilot/paperclip-cos \
+    PATH=/opt/te-paperclip/node/bin:/home/tepilot/.local/bin:/usr/local/bin:/usr/bin:/bin \
+    /home/tepilot/.local/bin/paperclipai auth bootstrap-ceo \
+      --data-dir /home/tepilot/paperclip-cos \
+      --base-url http://127.0.0.1:3100 \
+      --expires-hours 72
+) || echo "ADMIN_INVITE=Could not create; check authenticated Paperclip signup later"
+echo "ADMIN_INVITE_INSTRUCTION=Use the invite link above but replace http://127.0.0.1:3100 with your Tailscale HTTPS URL after joining."
+echo "IMPORTANT=Do not paste Tailscale authorisation URLs or Paperclip admin invite tokens into chat or GitHub."
 echo "NEXT_PHONE_STEPS=Open the Tailscale authorisation link above; enable MagicDNS and HTTPS certificates in the Tailscale admin DNS settings; connect Android Tailscale to the same tailnet."
 echo "FIND_ADDRESS=Open the Tailscale Machines page and select te-chief-of-staff; the browser URL is https://<machine>.<tailnet>.ts.net"
 echo "CLOUDFLARE=UNMODIFIED"
