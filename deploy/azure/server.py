@@ -1,46 +1,69 @@
-"""Public-only Agent Reach MCP adapter.
-
-IMPORTANT: This application does not authenticate callers.
-Deploy only behind an ingress that validates Entra OAuth tokens, blocks bypass,
-and forwards authenticated requests. Never expose the container directly.
-"""
+"""Public-only Agent Reach MCP endpoint with Entra JWT verification."""
 import asyncio
+import json
 import os
+from contextlib import asynccontextmanager
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Mount, Route
+from starlette.types import ASGIApp, Receive, Scope, Send
 from mcp.server.fastmcp import FastMCP
+from auth import verify
 
-# Explicitly enumerated actions; do not expose arbitrary CLI commands.
-ACTIONS = {
-    "github": {"search"},
-    "youtube": {"search"},
-    "web": {"search"},
-    "v2ex": {"search"},
-    "bilibili": {"search"},
-}
-mcp = FastMCP("Agent Reach public research", host="0.0.0.0", port=8080, stateless_http=True, json_response=True)
+CHANNELS = frozenset({"github", "youtube", "web", "v2ex", "bilibili"})
+mcp = FastMCP("Agent Reach public research", stateless_http=True, json_response=True, streamable_http_path="/")
 
 @mcp.tool()
-async def public_search(channel: str, query: str) -> str:
-    """Search one of the approved public channels without a login."""
-    if channel not in ACTIONS or "search" not in ACTIONS[channel]:
+async def public_search(channel: str, query: str) -> dict:
+    """Search a public channel without login credentials."""
+    if channel not in CHANNELS:
         raise ValueError("Channel disabled")
     if not query or len(query) > 500:
-        raise ValueError("Query must contain 1 to 500 characters")
-    proc = await asyncio.create_subprocess_exec(
-        "agent-reach", channel, "search", query,
+        raise ValueError("Query must be 1-500 characters")
+    process = await asyncio.create_subprocess_exec(
+        "agent-reach", channel, "search", query, "--backend", "public-web",
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     try:
-        out, err = await asyncio.wait_for(proc.communicate(), timeout=30)
+        out, _ = await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError:
-        proc.kill()
-        await proc.communicate()
+        process.kill()
+        await process.communicate()
         raise ValueError("Research timed out")
-    if proc.returncode:
-        raise ValueError("Research failed")
-    return out.decode(errors="replace")[:20000]
+    if process.returncode:
+        raise ValueError("Public research failed")
+    try:
+        payload = json.loads(out)
+    except (ValueError, UnicodeDecodeError):
+        raise ValueError("Invalid upstream response")
+    if not payload.get("ok"):
+        return {"ok": False, "error": payload.get("error", {}).get("code", "upstream_failure")}
+    return {"ok": True, "result": payload.get("result")}
+
+class BearerGate:
+    def __init__(self, app: ASGIApp):
+        self.app = app
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http" or scope["path"] == "/healthz":
+            return await self.app(scope, receive, send)
+        headers = dict(scope.get("headers", []))
+        try:
+            verify(headers.get(b"authorization", b"").decode("ascii"))
+        except Exception:
+            response = Response("Unauthorized", status_code=401, headers={"WWW-Authenticate": 'Bearer error="invalid_token"'})
+            return await response(scope, receive, send)
+        return await self.app(scope, receive, send)
+
+async def health(_):
+    return JSONResponse({"status": "ok"})
+
+@asynccontextmanager
+async def lifespan(_):
+    async with mcp.session_manager.run():
+        yield
+
+app = BearerGate(Starlette(routes=[Route("/healthz", health), Mount("/mcp", app=mcp.streamable_http_app())], lifespan=lifespan))
 
 if __name__ == "__main__":
-    # This flag is a deployment safeguard, NOT authentication.
-    if os.getenv("AGENT_REACH_INGRESS_AUTHENTICATED") != "true":
-        raise SystemExit("Authenticated ingress must be independently verified")
-    mcp.run(transport="streamable-http")
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080, proxy_headers=False)
