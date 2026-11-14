@@ -39,7 +39,7 @@ echo "RESULT_LOG=$LOG"
 echo "=== CURRENT TESTS ==="
 python3 -m unittest discover -s tests -v || true
 echo "=== CHANGED FILES ==="
-git status --short
+runuser -u tepilot -- env HOME="$HOME_DIR" git -C "$HOME_DIR/benchmark" status --short
 echo "=== CODEX EVENT SUMMARY ==="
 python3 - "$LOG" <<'PY'
 import sys,json,collections
