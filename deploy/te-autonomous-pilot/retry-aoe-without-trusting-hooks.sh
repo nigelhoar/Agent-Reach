@@ -35,8 +35,10 @@ test "$BASE_TEST" -ne 0 || { echo "Baseline already fixed; abort duplicate run";
 test -f "$STAMP" && test -f "$RUNLOG"
 test "$(stat -c %U "$STAMP")" = tepilot
 grep -Fq "Hooks need review" "$RUNLOG" || { echo "Last run not provably hook-blocked; abort"; exit 1; }
-test ! -e "$STAMP.blocked-by-hooks" || { echo "Previous retry exists; abort"; exit 1; }
-mv "$STAMP" "$STAMP.blocked-by-hooks"
+test -f "$STAMP.blocked-by-hooks" || { echo "Expected prior hook-blocked attempt absent; abort"; exit 1; }
+test ! -e "$STAMP.failed-pane-target" || { echo "Pane-target retry already attempted; abort duplicate use"; exit 1; }
+mv "$STAMP" "$STAMP.failed-pane-target"
+echo "PREVIOUS_PANE_ADDRESSING_FAILURE=RECORDED"
 touch "$STAMP"
 chown tepilot:tepilot "$STAMP"
 # Independent systemd watchdog survives a broken/disconnected Azure Run Command.
@@ -62,16 +64,24 @@ if [ "${#SESSIONS[@]}" -ne 1 ]; then
   echo "Unable to identify exactly one pilot tmux session; refusing input"
   exit 1
 fi
-TMUX_TARGET="=${SESSIONS[0]}"
+# Query pane IDs directly. A session selector prefixed with "=" is valid for
+# has-session but NOT necessarily a send-keys pane target.
+mapfile -t PANES < <(run_as_pilot tmux list-panes -a -F '#{session_name} #{pane_id}' 2>/dev/null | awk -v target="${SESSIONS[0]}" '$1==target {print $2}')
+if [ "${#PANES[@]}" -ne 1 ] || [[ ! "${PANES[0]}" =~ ^%[0-9]+$ ]]; then
+  echo "Could not identify exactly one pane for synthetic session; refusing input"
+  exit 1
+fi
+TMUX_PANE="${PANES[0]}"
 echo "SYNTHETIC_TMUX_SESSION=VERIFIED"
+echo "SYNTHETIC_TMUX_PANE=VERIFIED"
 READY=0
 REVIEW_SEEN=0
 for _ in $(seq 1 30); do
   SCREEN="$(run_as_pilot "$AOE" -p main session capture --strip-ansi --lines 40 "$SID" 2>/dev/null || true)"
-  if [[ "$SCREEN" == *"Hooks need review"* ]]; then
+  if [[ "$SCREEN" == *"Hooks need review"* && "$SCREEN" == *"Continue without trusting"* ]]; then
     if [ "$REVIEW_SEEN" -eq 0 ]; then
       echo "CODEX_HOOK_REVIEW_DETECTED=YES"
-      run_as_pilot tmux send-keys -t "$TMUX_TARGET" 3
+      run_as_pilot tmux send-keys -t "$TMUX_PANE" 3
       echo "CODEX_HOOKS_TRUST=SKIPPED"
       REVIEW_SEEN=1
     fi
