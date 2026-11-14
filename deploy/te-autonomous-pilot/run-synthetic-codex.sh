@@ -23,12 +23,12 @@ install -d -o tepilot -g tepilot -m 0700 "$HOME_DIR/results"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG="$HOME_DIR/results/codex-$RUN_ID.jsonl"
 PROMPT="In this synthetic repository only: implement the unique_tasks function according to its docstring, add an edge-case unit test, run python3 -m unittest discover -s tests -v, and summarize changes. Do not install packages, make network requests, access other directories or credentials, or deploy anything."
-echo "STARTING: one Codex session, maximum 600 seconds, workspace-write sandbox."
+echo "STARTING: one Codex session, maximum 180 seconds, workspace-write sandbox."
 set +e
 runuser -u tepilot -- env -u OPENAI_API_KEY -u CODEX_API_KEY \
   HOME="$HOME_DIR" CODEX_HOME="$HOME_DIR/.codex" \
   PATH="$NODE:$HOME_DIR/.local/node_modules/.bin:/usr/local/bin:/usr/bin:/bin" \
-  timeout --signal=TERM --kill-after=15s 600s \
+  timeout --signal=TERM --kill-after=10s 180s \
   "$CODEX" exec --json --sandbox workspace-write --config 'approval_policy="never"' \
   "$PROMPT" >"$LOG" 2>&1
 RESULT=$?
@@ -44,12 +44,18 @@ echo "=== CODEX EVENT SUMMARY ==="
 python3 - "$LOG" <<'PY'
 import sys,json,collections
 c=collections.Counter()
+usage={}
 for line in open(sys.argv[1],encoding="utf-8",errors="replace"):
     try:
         obj=json.loads(line)
         c[str(obj.get("type","unknown"))]+=1
+        if obj.get("type")=="turn.completed":
+            u=obj.get("usage")
+            if isinstance(u,dict):
+                usage=u
     except Exception:
         pass
-print(dict(c))
+print('Events:',dict(c))
+print('Token usage:',usage or 'unavailable')
 PY
 exit 0
