@@ -51,7 +51,7 @@ Group=agentreach
 WorkingDirectory=/var/lib/agent-reach-mcp
 Environment=HOME=/var/lib/agent-reach-mcp
 LoadCredential=control-plane-key:/etc/agent-reach/control-plane-api-key
-ExecStart=/usr/local/bin/tunnel-client run --control-plane.tunnel-id=$TUNNEL_ID --control-plane.api-key=file:%d/control-plane-key --mcp.command="/opt/agent-reach/mcp-venv/bin/python /opt/agent-reach/source/deploy/te-readonly-mcp/server.py" --health.listen-addr=127.0.0.1:8082
+ExecStart=/usr/local/bin/tunnel-client run --control-plane.tunnel-id=$TUNNEL_ID --control-plane.api-key=file:/run/credentials/te-agent-reach-tunnel.service/control-plane-key --mcp.command="/opt/agent-reach/mcp-venv/bin/python /opt/agent-reach/source/deploy/te-readonly-mcp/server.py" --health.listen-addr=127.0.0.1:8082
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
