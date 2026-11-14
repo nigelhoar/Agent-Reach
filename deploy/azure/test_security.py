@@ -34,4 +34,8 @@ def test_wrong_scope_rejected():
 def test_public_channels_only():
     from server import CHANNELS
     assert {"instagram", "linkedin", "reddit", "xiaohongshu", "x", "facebook"}.isdisjoint(CHANNELS)
-    assert "github" in CHANNELS
+    assert CHANNELS == {"github", "youtube", "web"}
+    from server import BACKENDS
+    assert BACKENDS["web"] == ("--backend", "public-web")
+    assert BACKENDS["github"] == ("--backend", "github-api")
+    assert BACKENDS["youtube"] == ()
