@@ -6,7 +6,7 @@ set -euo pipefail
 test "$(id -un)" = root
 H=/home/tepilot
 DIR="$H/paperclip-cos/project-intelligence"
-REF=c4c58ce47760d58b0af1d0821ce6d2d750cdc4d2
+REF=f80b94c675672d881d52f62efbb684c9167b70fc
 BASE="https://raw.githubusercontent.com/nigelhoar/Agent-Reach/$REF/deploy/te-autonomous-pilot"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
