@@ -10,7 +10,7 @@ NODE="$ROOT/node/bin"
 CLI="$H/.local/bin/paperclipai"
 STATE="$H/paperclip-cos"
 SERVICE=te-paperclip-cos.service
-echo "=== PAPRCLIP PRECHECK ==="
+echo "=== PAPERCLIP PRECHECK ==="
 test "$(id -un)" = root
 test -d "$H" && id tepilot >/dev/null
 systemctl is-active --quiet te-ai-pilot-block-imds.service
@@ -54,7 +54,7 @@ run_pilot() {
 test "$("$NODE/node" -p 'Number(process.versions.node.split(".")[0])')" -eq 24
 echo "=== INSTALL MANAGED PAPERCLIP CLI ==="
 if [ ! -x "$CLI" ]; then
-  run_pilot "$NODE/npx" --yes paperclipai install
+  run_pilot "$NODE/npx" --yes paperclipai@latest install --yes
 fi
 run_pilot "$CLI" --version
 install -d -m 0700 -o tepilot -g tepilot "$STATE"
@@ -71,6 +71,10 @@ if ! find "$STATE" -type f -name config.json -print -quit | grep -q .; then
   SETUP_RC=$?
   set -e
   echo "ONBOARD_EXIT=$SETUP_RC"
+  if ! find "$STATE" -type f -name config.json -print -quit | grep -q .; then
+    echo "Onboarding did not create configuration; inspect $STATE/initial-onboard.log locally without exposing bootstrap tokens."
+    exit 1
+  fi
 fi
 echo "=== ENFORCE PRIVATE AUTHENTICATED MODE ==="
 python3 - "$STATE" <<'PY'
@@ -149,7 +153,7 @@ for n in $(seq 1 35); do
 done
 if [ "$OK" != 1 ]; then
   echo "Paperclip did not answer healthy; last unit log excerpt:"
-  journalctl -u "$SERVICE" -n 30 --no-pager | tail -n 30
+  journalctl -u "$SERVICE" -n 30 --no-pager | sed -E 's/pcp_bootstrap_[A-Za-z0-9]+/pcp_bootstrap_[REDACTED]/g; s#(/invite/)[A-Za-z0-9_-]+#\1[REDACTED]#g' | tail -n 30
   exit 1
 fi
 python3 - <<'PY'
@@ -165,4 +169,4 @@ echo "PAPERCLIP_SERVICE=ACTIVE"
 echo "PAPERCLIP_HEALTH=OK"
 echo "PAPERCLIP_URL_LOCAL_ONLY=http://127.0.0.1:3100"
 echo "AGENT_EXECUTION=NOT_ENABLED_BY_BOOTSTRAP"
-echo "NEXT=Authenticate admin and configure secure remote access; project import follows."
+echo "NEXT=Complete the admin bootstrap through approved private access; portfolio import follows."
