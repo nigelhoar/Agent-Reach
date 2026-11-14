@@ -28,7 +28,7 @@ set -e
 # Explicit CLI arguments restrict Codex to its writable project folder.
 runuser -u tepilot -- env -u OPENAI_API_KEY -u CODEX_API_KEY HOME="$H" CODEX_HOME="$H/.codex" PATH="$PATH_AOE" \
   "$AOE" add --cmd codex --title "$TITLE" \
-  --extra-args "--sandbox workspace-write --ask-for-approval never" "$WORK"
+  --extra-args "--sandbox workspace-write --ask-for-approval never" --skip-on-create "$WORK"
 echo "AOE_SESSION_PREPARED=$TITLE"
 echo "AOE_SESSION_LAUNCHED=NO"
 echo "MODEL_CALLS=ZERO"
