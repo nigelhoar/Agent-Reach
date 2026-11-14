@@ -31,7 +31,7 @@ case "$STATUS" in *"Logged in using ChatGPT"*) ;; *) echo "Subscription authenti
 run_as_pilot git -C "$WORK" diff --quiet
 run_as_pilot git -C "$WORK" diff --cached --quiet
 set +e
-(cd "$WORK"; python3 -m unittest discover -s tests -q >/dev/null 2>&1)
+run_as_pilot bash -c 'cd /home/tepilot/comparisons/aoe && python3 -m unittest discover -s tests -q' >/dev/null 2>&1
 INITIAL_TEST=$?
 set -e
 test "$INITIAL_TEST" -ne 0 || { echo "Baseline tests already pass; stop."; exit 1; }
@@ -93,7 +93,7 @@ echo "AGENT_SESSION_STOPPED=YES"
 
 echo "=== FINAL TEST RESULT ==="
 set +e
-(cd "$WORK"; python3 -m unittest discover -s tests -v)
+run_as_pilot bash -c 'cd /home/tepilot/comparisons/aoe && python3 -m unittest discover -s tests -v'
 TEST_RESULT=$?
 set -e
 echo "TEST_EXIT=$TEST_RESULT"
