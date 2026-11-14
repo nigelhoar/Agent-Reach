@@ -50,6 +50,7 @@ echo "=== UNIT TESTS ==="
 echo "=== DIFF STAT ==="
 runuser -u tepilot -- git -C "$WORK" diff --stat
 echo "=== ORCH TASK ==="
+cd "$WORK"
 runuser -u tepilot -- env -u OPENAI_API_KEY -u CODEX_API_KEY \
   HOME="$H" CODEX_HOME="$H/.codex" PATH="$PATH_ORCH" "$BIN/orch" task show "$TASK"
 echo "=== AGENT USAGE ==="
