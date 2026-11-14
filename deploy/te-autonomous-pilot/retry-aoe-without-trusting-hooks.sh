@@ -107,7 +107,7 @@ done
 echo "NEW_TEST_AND_PASSING_SUITE=$NEW_TEST_PASS"
 if [ "$NEW_TEST_PASS" = YES ]; then sleep 4; fi
 echo "=== TERMINAL CAPTURE ==="
-run_as_pilot "$AOE" -p main session capture --strip-ansi --lines 80 "$SID" | tee "$RUNLOG" || true
+run_as_pilot "$AOE" -p main session capture --strip-ansi --lines 35 "$SID" | tee "$RUNLOG" || true
 chown tepilot:tepilot "$RUNLOG"
 cleanup
 trap - EXIT
