@@ -58,7 +58,7 @@ echo "STARTING_AGENT_OF_EMPIRES_SESSION=$SID"
 run_as_pilot "$AOE" -p main session start "$SID"
 # Wait for the native CLI to reach its input prompt, not just for tmux startup.
 set +e
-run_as_pilot "$AOE" -p main session wait --until idle --timeout 35000 "$SID" >/dev/null
+run_as_pilot "$AOE" -p main session wait --until idle --until waiting --timeout 35000 "$SID" >/dev/null
 READY=$?
 set -e
 if [ "$READY" -ne 0 ]; then
@@ -73,10 +73,14 @@ PROMPT="In this synthetic Python project only: fix the unique_tasks function to 
 echo "SENDING_ONE_SYNTHETIC_TASK=YES"
 run_as_pilot "$AOE" -p main send --no-revive "$SID" "$PROMPT"
 
+# Observe the transition into execution before waiting for completion.
 set +e
-run_as_pilot "$AOE" -p main session wait --until idle --until waiting --until error --timeout 125000 "$SID"
+run_as_pilot "$AOE" -p main session wait --until running --timeout 30000 "$SID"
+RUNNING_OBSERVED=$?
+run_as_pilot "$AOE" -p main session wait --until idle --until waiting --until error --timeout 95000 "$SID"
 WAIT_CODE=$?
 set -e
+echo "AGENT_RUNNING_OBSERVED=$([ "$RUNNING_OBSERVED" -eq 0 ] && echo YES || echo NO)"
 echo "AGENT_WAIT_EXIT=$WAIT_CODE"
 echo "=== CAPTURE LAST 80 TERMINAL LINES ==="
 run_as_pilot "$AOE" -p main session capture --strip-ansi --lines 80 "$SID" | tee "$RUNLOG" || true
