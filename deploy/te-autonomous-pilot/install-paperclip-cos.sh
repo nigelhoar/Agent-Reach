@@ -60,13 +60,13 @@ run_pilot "$CLI" --version
 install -d -m 0700 -o tepilot -g tepilot "$STATE"
 # The standard CLI --yes quickstart starts the server. Bound that one-time
 # setup with timeout, then enforce authenticated+loopback in config and run
-# under a controlled system unit. Never expose its temporary LAN bind externally.
+# under a controlled system unit. Even temporary onboarding stays loopback-only.
 if ! find "$STATE" -type f -name config.json -print -quit | grep -q .; then
   echo "=== INITIAL CONFIGURATION ==="
   install -m 0600 -o tepilot -g tepilot /dev/null "$STATE/initial-onboard.log"
   set +e
   run_pilot timeout --signal=TERM --kill-after=5s 80s \
-    "$CLI" onboard --yes --bind lan --no-install-service \
+    "$CLI" onboard --yes --no-install-service \
     --data-dir "$STATE" >"$STATE/initial-onboard.log" 2>&1
   SETUP_RC=$?
   set -e
