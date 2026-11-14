@@ -21,6 +21,9 @@ if systemctl is-active --quiet "$SERVICE"; then
   echo; echo "PAPERCLIP_ALREADY_RUNNING=YES"
   exit 0
 fi
+if systemctl list-unit-files "$SERVICE" 2>/dev/null | grep -q "^$SERVICE"; then
+  systemctl stop "$SERVICE" || true
+fi
 apt-get update -qq
 apt-get install -y -qq ca-certificates curl jq xz-utils python3 git
 install -d -m 0755 "$ROOT"
@@ -52,7 +55,7 @@ run_pilot() {
     cd "$H"
     runuser -u tepilot -- env \
       -u OPENAI_API_KEY -u CODEX_API_KEY \
-      HOME="$H" CODEX_HOME="$H/.codex" \
+      HOME="$H" CODEX_HOME="$H/.codex" PAPERCLIP_HOME="$STATE" \
       PATH="$NODE:$H/.local/bin:$H/.local/node_modules/.bin:/usr/local/bin:/usr/bin:/bin" \
       PAPERCLIP_NO_BROWSER=1 \
       PAPERCLIP_DEPLOYMENT_MODE=authenticated \
@@ -63,9 +66,15 @@ run_pilot() {
 }
 test "$("$NODE/node" -p 'Number(process.versions.node.split(".")[0])')" -eq 24
 echo "=== INSTALL MANAGED PAPERCLIP CLI ==="
-if [ ! -x "$CLI" ]; then
-  run_pilot "$NODE/npx" --yes paperclipai@latest install --yes
+# The managed install manifest must share PAPERCLIP_HOME with --data-dir.
+# Azure's earlier install went into ~/.paperclip while the runtime looked at
+# ~/paperclip-cos/cli/install.json. Repair by installing into the runtime home.
+install -d -m 0700 -o tepilot -g tepilot "$STATE"
+if [ ! -x "$CLI" ] || [ ! -s "$STATE/cli/install.json" ]; then
+  echo "INSTALL_HOME=$STATE"
+  run_pilot "$NODE/npx" --yes paperclipai@2026.1106.0 install --yes
 fi
+test -s "$STATE/cli/install.json" || { echo "Managed CLI manifest missing from runtime home"; exit 1; }
 run_pilot "$CLI" --version
 install -d -m 0700 -o tepilot -g tepilot "$STATE"
 # The standard CLI --yes quickstart starts the server. Bound that one-time
@@ -130,6 +139,7 @@ Group=tepilot
 WorkingDirectory=$H
 Environment=HOME=$H
 Environment=CODEX_HOME=$H/.codex
+Environment=PAPERCLIP_HOME=$STATE
 Environment=PATH=$NODE:$H/.local/bin:$H/.local/node_modules/.bin:/usr/local/bin:/usr/bin:/bin
 Environment=PAPERCLIP_NO_BROWSER=1
 Environment=PAPERCLIP_AUTH_RATE_LIMIT_ENABLED=true
