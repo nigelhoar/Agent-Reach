@@ -45,11 +45,21 @@ if [ ! -x "$NODE/node" ]; then
 fi
 "$NODE/node" --version
 run_pilot() {
-  runuser -u tepilot -- env \
-    -u OPENAI_API_KEY -u CODEX_API_KEY \
-    HOME="$H" CODEX_HOME="$H/.codex" \
-    PATH="$NODE:$H/.local/bin:$H/.local/node_modules/.bin:/usr/local/bin:/usr/bin:/bin" \
-    PAPERCLIP_NO_BROWSER=1 "$@"
+  # Azure RunCommand invokes commands from an inaccessible /var/lib/waagent
+  # working directory. npm/npx child processes fail with spawn sh EACCES
+  # unless root changes to a directory visible to tepilot BEFORE runuser.
+  (
+    cd "$H"
+    runuser -u tepilot -- env \
+      -u OPENAI_API_KEY -u CODEX_API_KEY \
+      HOME="$H" CODEX_HOME="$H/.codex" \
+      PATH="$NODE:$H/.local/bin:$H/.local/node_modules/.bin:/usr/local/bin:/usr/bin:/bin" \
+      PAPERCLIP_NO_BROWSER=1 \
+      PAPERCLIP_DEPLOYMENT_MODE=authenticated \
+      PAPERCLIP_DEPLOYMENT_EXPOSURE=private \
+      PAPERCLIP_BIND=loopback \
+      "$@"
+  )
 }
 test "$("$NODE/node" -p 'Number(process.versions.node.split(".")[0])')" -eq 24
 echo "=== INSTALL MANAGED PAPERCLIP CLI ==="
@@ -66,7 +76,7 @@ if ! find "$STATE" -type f -name config.json -print -quit | grep -q .; then
   install -m 0600 -o tepilot -g tepilot /dev/null "$STATE/initial-onboard.log"
   set +e
   run_pilot timeout --signal=TERM --kill-after=5s 80s \
-    "$CLI" onboard --yes --no-install-service \
+    "$CLI" onboard --yes --bind loopback --no-install-service \
     --data-dir "$STATE" >"$STATE/initial-onboard.log" 2>&1
   SETUP_RC=$?
   set -e
