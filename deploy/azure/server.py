@@ -10,7 +10,10 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from mcp.server.fastmcp import FastMCP
 from auth import verify
 
-CHANNELS = frozenset({"github", "youtube", "web", "v2ex", "bilibili"})
+CHANNELS = frozenset({"github", "youtube", "web"})
+# Only web exposes the explicit public-web backend. Other channels use their
+# built-in public search routes (GitHub API and yt-dlp respectively).
+BACKENDS = {"web": ("--backend", "public-web"), "github": ("--backend", "github-api"), "youtube": ()}
 mcp = FastMCP("Agent Reach public research", stateless_http=True, json_response=True, streamable_http_path="/")
 
 @mcp.tool()
@@ -21,7 +24,7 @@ async def public_search(channel: str, query: str) -> dict:
     if not query or len(query) > 500:
         raise ValueError("Query must be 1-500 characters")
     process = await asyncio.create_subprocess_exec(
-        "agent-reach", channel, "search", query, "--backend", "public-web",
+        "agent-reach", channel, "search", query, *BACKENDS[channel],
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     try:
