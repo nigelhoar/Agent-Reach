@@ -71,7 +71,7 @@ for _ in $(seq 1 30); do
   if [[ "$SCREEN" == *"Hooks need review"* ]]; then
     if [ "$REVIEW_SEEN" -eq 0 ]; then
       echo "CODEX_HOOK_REVIEW_DETECTED=YES"
-      run_as_pilot tmux send-keys -t "$TMUX_TARGET" Escape
+      run_as_pilot tmux send-keys -t "$TMUX_TARGET" 3
       echo "CODEX_HOOKS_TRUST=SKIPPED"
       REVIEW_SEEN=1
     fi
