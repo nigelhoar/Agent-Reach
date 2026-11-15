@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # First Paperclip Chief of Staff agent: use existing VM-hosted Codex login.
 # Requires *Paperclip board-admin* browser approval, NOT OpenAI device login.
-# No copying auth.json; never starts autonomous heartbeats or production work.
+# No copying auth.json; no scheduled heartbeats or production work.
+# Manual invocation stays enabled via wakeOnDemand=true (independent of timer).
 set -euo pipefail
 SERVICE="te-cos-activate-existing-codex.service"
 CMD=/usr/local/sbin/te-cos-activate-existing-codex-worker.sh
@@ -104,7 +105,7 @@ d={
  "budgetMonthlyCents":0,
  "permissions":{"canCreateAgents":False, "canCreateSkills":False},
  "runtimeConfig":{"heartbeat":{"enabled":False, "intervalSec":86400,
-    "wakeOnDemand":False, "skipTimerWhenNoActionableWork":True,
+    "wakeOnDemand":True, "skipTimerWhenNoActionableWork":True,
     "cooldownSec":10,"maxConcurrentRuns":1}}
 }
 if stage.startswith("SETUP:"): d["setupAgentId"]=stage.split(":",2)[1]
