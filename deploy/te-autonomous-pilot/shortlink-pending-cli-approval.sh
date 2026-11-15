@@ -1,20 +1,59 @@
 #!/usr/bin/env bash
-# Short, private Tailscale link for an already-pending Paperclip CLI approval.
-# Does not regenerate a challenge, print tokens, modify Paperclip, or expose Funnel.
+# Short, private Tailscale link for a Paperclip CLI approval.
+# Resumes a running challenge; safely renews it if the worker has exited.
+# Never prints tokens, changes Paperclip, or enables Tailscale Funnel.
 set -euo pipefail
 test "$(id -un)" = root
 D=/var/lib/te-cos-activate-existing-codex
 test -f "$D/board-login.log"
 test -f "$D/state"
-grep -qx 'STATE=AWAITING_PAPERCLIP_CLI_APPROVAL' "$D/state" || {
-  echo "No pending CLI approval: $(cat "$D/state")"
-  exit 0
-}
-systemctl is-active --quiet te-cos-activate-existing-codex.service || {
-  echo 'ERROR=CLI_APPROVAL_WORKER_IS_NOT_RUNNING'
-  exit 1
-}
 systemctl is-active --quiet te-paperclip-cos.service
+# The CLI approval worker is a systemd Type=oneshot unit. While it waits
+# for browser approval its normal ActiveState is *activating*, not active.
+# is-active --quiet wrongly rejects this and caused the previous failure.
+# Check whether its actual MainPID is alive instead, preserving its
+# existing approval challenge rather than unnecessarily minting a new one.
+WORKER=te-cos-activate-existing-codex.service
+STATE="$(cat "$D/state")"
+if [ "$STATE" = 'STATE=CHIEF_OF_STAFF_CONFIGURED' ]; then
+  echo 'STATE=CHIEF_OF_STAFF_CONFIGURED'
+  echo 'NEXT=Refresh Paperclip; no further CLI approval is needed.'
+  exit 0
+fi
+PID="$(systemctl show -p MainPID --value "$WORKER" 2>/dev/null || true)"
+if [[ "$PID" =~ ^[0-9]+$ ]] && (( PID > 0 )) && kill -0 "$PID" 2>/dev/null; then
+  echo 'PAPERCLIP_APPROVAL_WORKER=RUNNING'
+else
+  echo 'PAPERCLIP_APPROVAL_WORKER=RESTARTING'
+  # An expired or failed approval invalidates its old browser URL. The worker
+  # writes a fresh challenge and keeps its own board token private.
+  : > "$D/board-login.log"
+  systemctl reset-failed "$WORKER" >/dev/null 2>&1 || true
+  systemctl start --no-block "$WORKER"
+  # Wait for the new challenge and its pending state; NEVER echo its token.
+  READY=0
+  for n in $(seq 1 30); do
+    PID="$(systemctl show -p MainPID --value "$WORKER" 2>/dev/null || true)"
+    if grep -qx 'STATE=AWAITING_PAPERCLIP_CLI_APPROVAL' "$D/state" \
+      && grep -q 'Open this URL in your browser to approve CLI access:' "$D/board-login.log" \
+      && [[ "$PID" =~ ^[0-9]+$ ]] && (( PID > 0 )) && kill -0 "$PID" 2>/dev/null; then
+      READY=1
+      break
+    fi
+    sleep 1
+  done
+  if [ "$READY" != 1 ]; then
+    echo 'ERROR=NEW_PAPERCLIP_CLI_APPROVAL_NOT_READY'
+    echo "WORKER_STATE=$(systemctl show -p ActiveState --value "$WORKER")"
+    # No raw logs here: logs contain a secret capability URL.
+    exit 1
+  fi
+fi
+if ! grep -qx 'STATE=AWAITING_PAPERCLIP_CLI_APPROVAL' "$D/state"; then
+  echo "STATE=$(cat "$D/state")"
+  echo 'ERROR=NO_PENDING_APPROVAL_TO_SHORTEN'
+  exit 1
+fi
 FQDN="$(tailscale status --json | python3 -c 'import json,sys;print(json.load(sys.stdin).get("Self",{}).get("DNSName","").rstrip("."))')"
 [[ "$FQDN" =~ ^[A-Za-z0-9._-]+\.ts\.net$ ]] || {
   echo 'ERROR=TAILSCALE_DNS_NOT_READY'
