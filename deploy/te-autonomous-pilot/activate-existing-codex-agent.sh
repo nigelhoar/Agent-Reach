@@ -60,12 +60,24 @@ RESOLVE="$(printf '%s\n' "$AGENTS" | python3 -c '
 import json,sys
 a=json.load(sys.stdin)
 assert isinstance(a,list), "Agent list must be array"
-existing=[x for x in a if x.get("role")=="ceo" and x.get("status")!="terminated" and x.get("pauseReason")!="setup"]
-setup=[x for x in a if x.get("role")=="ceo" and x.get("pauseReason")=="setup" and x.get("status")!="terminated"]
-if len(existing)==1 and not setup: print("EXISTS:"+existing[0]["id"])
-elif len(setup)==1 and not existing: print("SETUP:"+setup[0]["id"]+":"+setup[0].get("name","Chief of Staff"))
-elif not a: print("NEW")
-else: raise SystemExit("Ambiguous agent state; refusing to duplicate or change other agents")
+# Paperclip first-agent wizard initially assigns role="general", not "ceo".
+# Only adopt the exact one-agent setup state; do not touch other agents.
+active=[x for x in a if x.get("status")!="terminated"]
+if not a:
+    print("NEW")
+elif len(active)==1 and len(a)==1:
+    x=active[0]
+    md=x.get("metadata") or {}
+    if x.get("pauseReason")=="setup" and x.get("role") in ("general","ceo") and (md.get("setupAdapterPending") is True or x.get("name","").strip().lower() in ("chief of staff","chief of staff agent")):
+        print("SETUP:"+x["id"]+":"+x.get("name","Chief of Staff"))
+    elif x.get("role")=="ceo" and x.get("pauseReason")!="setup":
+        print("EXISTS:"+x["id"])
+    else:
+        print("AGENT_INVENTORY="+json.dumps([{"name":x.get("name"),"role":x.get("role"),"status":x.get("status"),"pauseReason":x.get("pauseReason"),"setupPending":md.get("setupAdapterPending")}]),file=sys.stderr)
+        raise SystemExit("Agent is not an identifiable first-agent setup; no changes made")
+else:
+    print("AGENT_INVENTORY="+json.dumps([{"name":x.get("name"),"role":x.get("role"),"status":x.get("status"),"pauseReason":x.get("pauseReason")} for x in a]),file=sys.stderr)
+    raise SystemExit("Multiple agents or unsupported setup state; no changes made")
 ')"
 if [[ "$RESOLVE" = EXISTS:* ]]; then
   printf 'STATE=AGENT_ALREADY_EXISTS\n' >"$STATUS/state"
