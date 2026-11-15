@@ -149,9 +149,35 @@ UMask=0077
 WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
-systemctl enable --now te-paperclip-cli-approve-shortlink.service >/dev/null
-systemctl is-active --quiet te-paperclip-cli-approve-shortlink.service
-curl -fsS --max-time 5 -o /dev/null -w '%{http_code}' "http://127.0.0.1:3115/" | grep -qx '303'
+systemctl enable te-paperclip-cli-approve-shortlink.service >/dev/null
+# Type=simple is considered started before Python binds its listener. Wait
+# for readiness instead of treating an immediate ECONNREFUSED as fatal.
+if ! systemctl is-active --quiet te-paperclip-cli-approve-shortlink.service; then
+  systemctl reset-failed te-paperclip-cli-approve-shortlink.service >/dev/null 2>&1 || true
+  systemctl start te-paperclip-cli-approve-shortlink.service
+fi
+READY=0
+for n in $(seq 1 40); do
+  HTTP="$(curl -s --max-time 2 -o /dev/null -w '%{http_code}' 'http://127.0.0.1:3115/' 2>/dev/null || true)"
+  if [ "$HTTP" = "303" ]; then READY=1; break; fi
+  if [ "$HTTP" = "410" ]; then
+    echo 'ERROR=PAPERCLIP_APPROVAL_CHALLENGE_NOT_AVAILABLE'
+    exit 1
+  fi
+  if ! systemctl is-active --quiet te-paperclip-cli-approve-shortlink.service; then
+    echo 'ERROR=SHORTLINK_SERVICE_FAILED'
+    journalctl -u te-paperclip-cli-approve-shortlink.service -n 15 --no-pager 2>/dev/null || true
+    exit 1
+  fi
+  sleep 0.5
+done
+if [ "$READY" != 1 ]; then
+  echo 'ERROR=SHORTLINK_SERVICE_NOT_LISTENING'
+  systemctl show te-paperclip-cli-approve-shortlink.service -p ActiveState -p SubState -p ExecMainStatus --no-pager || true
+  journalctl -u te-paperclip-cli-approve-shortlink.service -n 15 --no-pager 2>/dev/null || true
+  exit 1
+fi
+echo 'SHORTLINK_LOCAL_LISTENER=READY'
 # Add only /go to existing Tailnet HTTPS Serve; preserves Paperclip '/' and leaves Funnel off.
 tailscale serve --yes --bg --https=443 --set-path=/go http://127.0.0.1:3115 >/dev/null
 tailscale serve status --json >"$AFTER"
